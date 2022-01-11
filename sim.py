@@ -65,7 +65,7 @@ def main():
 
     submerged = False # wether the submarine is submerged. while submerged the submarine doesn't recieve gps corrections
 
-    gps_on = False # wether gps measurements get drawn
+    gps_on = True # wether gps measurements get drawn
 
     draw_estimated = False # wether to draw estimated (by GPS and/or IMU) position of submarine
 
@@ -87,13 +87,13 @@ def main():
         ticks += 1
 
 #GPS measurement every couple of frames
-        if ticks % 1 == 0:
-            real_sub.gps_measure()
-            if submerged == False:
-                correction_vector = estimated_sub.pos - np.mean(real_sub.measurements, axis = 0)
-                estimated_sub.pos = estimated_sub.pos - correction_vector
-                estimated_sub.velocity -= correction_vector*0.01 
-
+        # if ticks % 1 == 0:
+        #     # real_sub.gps_measure()
+        #     if submerged == False:
+        #         correction_vector = estimated_sub.pos_real - np.mean(real_sub.measurements, axis = 0)
+        #         estimated_sub.pos_real = estimated_sub.pos_real - correction_vector
+        #         estimated_sub.velocity_real -= correction_vector*0.01 
+#
         for event in pg.event.get():
             
             if event.type == pg.QUIT:
@@ -113,8 +113,8 @@ def main():
                     gps_on = not gps_on
                 if event.key == 115: # check if user presses 's' and submerge/raise submarine
                     submerged = not submerged 
-                if event.key == 101: # check if user presses 'e' and show/hide estimated position
-                    draw_estimated = not draw_estimated
+                # if event.key == 101: # check if user presses 'e' and show/hide estimated position
+                #     draw_estimated = not draw_estimated
                 if event.key == 114: # check if user presses 'r' and show/hide real position
                     draw_real = not draw_real                    
                 if event.key == 102: # check if user presses 'f' and show/hide vector/flow field
@@ -143,16 +143,16 @@ def main():
         try:
             acceleration = np.sum(arrows,axis =0)
 
-            real_sub.update(acceleration)
+            real_sub.update(acceleration, submerged)
 
             #calculate drift
             if draw_ff:
-                drift = np.array(vector_field.Sample(estimated_sub.pos))*0.3 # vector_field drift from flow field and scale it
+                drift = np.array(vector_field.Sample(estimated_sub.pos_real))*0.3 # vector_field drift from flow field and scale it
             else:
                 rng = default_rng()
                 drift = rng.normal(0,1,size =2)*imu_drift # vector_field drift from random normal distribution
 
-            estimated_sub.update(acceleration + drift) # add drift to acceleration vector
+            estimated_sub.update(acceleration + drift, submerged) # add drift to acceleration vector
              
                 
         except:
@@ -164,7 +164,7 @@ def main():
                 GUI.add_text_object('  ', ' ',color = LINE_COLOR_WHITE)
                 GUI.add_text_object('press [ARROWS KEYS] to move submarine', ' ',color = LINE_COLOR_WHITE)
                 GUI.add_text_object('press [S] to submerge submarine', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [E] to show measured submarine position', ' ',color = LINE_COLOR_WHITE)
+                # GUI.add_text_object('press [E] to show measured submarine position', ' ',color = LINE_COLOR_WHITE)
                 GUI.add_text_object('press [R] to show real submarine position', ' ',color = LINE_COLOR_WHITE)
                 GUI.add_text_object('press [G] to show GPS readings', ' ',color = LINE_COLOR_WHITE)
                 GUI.add_text_object('press [F] to toggle flow field', ' ',color = LINE_COLOR_WHITE)
@@ -182,10 +182,13 @@ def main():
                 GUI.add_text_object('Show real position = ', draw_real, color = LINE_COLOR_GREEN)
                 GUI.add_text_object('Flow field active = ', draw_ff, color = LINE_COLOR_GREEN)
 
-                GUI.add_text_object('____________________________________  ', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('   ', ' ',color = LINE_COLOR_WHITE)            
-                GUI.add_text_object('Ground truth', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('Estimated position', ' ',color = LINE_COLOR_WHITE)                
+                # GUI.add_text_object('____________________________________  ', ' ',color = LINE_COLOR_WHITE)
+                # GUI.add_text_object('   ', ' ',color = LINE_COLOR_WHITE)            
+                # GUI.add_text_object('Ground truth', ' ',color = LINE_COLOR_WHITE)
+                # GUI.add_text_object('Estimated position', ' ',color = LINE_COLOR_WHITE)       
+                # 
+                GUI.add_text_object('____________________________________   ', ' ',color = LINE_COLOR_WHITE)         
+                GUI.add_text_object('Estimate Covariance Matrix = ', np.around(real_sub.P_current_posterior, 2),color = LINE_COLOR_WHITE)
 
         except:
             pass
