@@ -81,14 +81,14 @@ def main():
     #############
     # MAIN LOOP #
     #############
-    # hello
+    # hello hello v2
     while run:
         clock.tick(FPS)
         ticks += 1
 
 #GPS measurement every couple of frames
         if ticks % 1 == 0:
-            real_sub.gps_measure(num_samples=1,stddev = 40)
+            real_sub.gps_measure()
             if submerged == False:
                 correction_vector = estimated_sub.pos - np.mean(real_sub.measurements, axis = 0)
                 estimated_sub.pos = estimated_sub.pos - correction_vector
