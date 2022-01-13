@@ -189,6 +189,7 @@ def main():
                 # 
                 GUI.add_text_object('____________________________________   ', ' ',color = LINE_COLOR_WHITE)         
                 GUI.add_text_object('Estimate Covariance Matrix = ', np.around(real_sub.P_current_posterior, 2),color = LINE_COLOR_WHITE)
+                GUI.add_text_object('Kalman Gain = ', np.around(real_sub.K, 2),color = LINE_COLOR_WHITE)
 
         except:
             pass

@@ -109,11 +109,12 @@ class Submarine:
     #gps measurement
         # multiply sigma_r by infinity if sumberged
         if submerged: 
-            r_factor = 500
+            r_factor = 5000
         else:
             r_factor = 1
         rng = np.random.default_rng()
-        measure =  rng.normal(loc = self.pos_real, scale = self.sigma_r*r_factor, size = (2))
+        # measure =  rng.normal(loc = self.pos_real, scale = self.sigma_r*r_factor, size = (2))
+        measure = np.random.multivariate_normal(self.pos_real,self.R * r_factor)
         if len(self.measurements) > FPS*10: self.measurements.pop(0)
         self.measurements.append(measure)
 
@@ -122,10 +123,10 @@ class Submarine:
         self.x_real = np.matmul(self.A, self.x_real) + self.B * acceleration * SUB_ACCELERATION + self.B * np.random.multivariate_normal([0,0],self.Q)
 
         # Kalman filter 
-        ### time update
+        ### prediction stage
         self.x_current_prior = np.matmul(self.A, self.x_previous_posterior) + self.B * acceleration * SUB_ACCELERATION
         self.P_current_prior = np.matmul(self.A, np.matmul(self.P_previous_posterior,self.A.transpose())) + self.Q
-        ### measurment update
+        ### correction stage
         self.K = np.matmul(self.P_current_prior, np.matmul(self.H.transpose(), np.linalg.inv(self.P_current_prior + self.R*r_factor))) # calculat Kalman gain
         self.z = np.array([self.measurements[-1],[0,0]],dtype = np.float32) # get latest measurement
         self.x_current_posterior = self.x_current_prior + np.matmul(self.K, (self.z - np.matmul(self.H, self.x_current_prior))) # update state estimate with measurement
