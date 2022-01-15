@@ -10,13 +10,25 @@ from utils import draw_cross
 delta_t = 1
 
 class Submarine:
-    def __init__(self,width,length,pos_x = HEIGHT /2,pos_y = WIDTH/2, fill_color = LINE_COLOR_GREEN,line_color = LINE_COLOR_GREEN):
+    
+    # static variables
+    force_K_zero = True
+    
+    def __init__(self,width,length,pos_x = HEIGHT /2,pos_y = WIDTH/2,\
+        fill_color = LINE_COLOR_GREEN,line_color = LINE_COLOR_GREEN,\
+        draw_cross=True,draw_sub = True, line_color_est = LINE_COLOR_RED):
+        
+
+
         # graphics
         self.width = width # size of submarine
         self.length = length # size of submarine
         self.fill_color = fill_color 
         self.line_color = line_color
+        self.line_color_est = line_color_est
         self.measurements = [] # used to store GPS location
+        self.draw_cross = draw_cross
+        self.draw_sub = draw_sub
 
         # extracted from state vector for vizualization
         self.velocity_real = np.zeros((2,)) # current real velocity
@@ -38,7 +50,7 @@ class Submarine:
         self.A = np.array   ([[1, delta_t],[0,1-SUB_ACCELERATION*SUB_ACCELERATION_DECAY]],dtype=np.float32) # dynamic model with acceleration decay
         self.x_previous_posterior = np.array([[pos_y, pos_x], [0,0]], dtype = np.float32) # previous estimate for state vector "x"-> initialize in center of screen and 0 velocity
         self.x_current_prior = np.array([[pos_y, pos_x], [0,0]], dtype = np.float32) # current estimate for state vector "x"-> initialize in center of screen and 0 velocity
-        self.B = np.array([[(delta_t**2)/2],[delta_t]]) # matrix to transform control vector "u" to a [position, velocity]-matrix
+        self.B = np.array([[(delta_t**2)/2,(delta_t**2)/2],[delta_t,delta_t]]) # matrix to transform control vector "u" to a [position, velocity]-matrix
         self.P_current_prior = np.array([[0,0],[0,0]], dtype = np.float32) # covariance matrix of current state vector prior
         self.K = np.array([[0,0],[0,0]], dtype = np.float32) # Kalman gain
         self.z = np.array([[0,0],[0,0]], dtype = np.float32) # GPS measurement
@@ -49,18 +61,6 @@ class Submarine:
         self.x_current_posterior =  np.array([[0,0], [0,0]], dtype = np.float32)
         self.P_current_posterior = np.array([[0,0],[0,0]], dtype = np.float32) # covariance matrix of current state vector posterior
 
-
-
-
-
-    def gps_measure(self):
-        # #Draw some measures around a given submarine and store the result in the instance 
-        # num_samples = 1
-        # rng = np.random.default_rng()
-        # measure =  rng.normal(loc = self.pos_real, scale = self.sigma_r, size = (2))
-        # if len(self.measurements) > FPS*10: self.measurements.pop(0)
-        # self.measurements.append(measure)
-        pass
 
         
                 
@@ -73,38 +73,46 @@ class Submarine:
             pg.draw.circle(surface,color = draw_color_main,radius=draw_radius_main,center=self.measurements[-1])
 
     def draw(self):
-        try:
-            #draw trail
+        if self.draw_sub:
+
+            #draw trails
             if len(self.pos_real_history)>2:
                 pg.draw.aalines(WIN,self.line_color,closed=False,points=self.pos_real_history)
-            #draw contours
+            if len(self.pos_est_history)>2:
+                pg.draw.aalines(WIN,self.line_color_est,closed=False,points=self.pos_est_history)
+            #draw body
             pg.draw.aalines(WIN,self.line_color,closed=True,points=self.corners)
             gfx.filled_polygon(WIN,self.corners,(*self.fill_color,50))
             #draw head
             pg.draw.aalines(WIN,self.line_color,closed=False,points=(np.average(self.corners[1:3,:],axis=0),self.pos_real))
-            #draw direction
+            #draw velocity vector
             direction = np.average(self.corners[1:3,:],axis=0) - self.pos_real
             pg.draw.aalines(WIN,self.line_color,closed=False,
                     points=[np.average(self.corners[1:3,:],axis=0),
                     np.average(self.corners[1:3,:],axis=0)+direction*(np.linalg.norm(self.velocity_real)/7)**2
                     ])
             
-        except:
-            pass
-        draw_cross(self.pos_est)
+
+        if self.draw_cross : 
+            draw_cross(self.pos_est)
+            # pg.draw.circle(WIN,self.line_color_est,self.pos_est,np.cbrt(np.linalg.det(self.P_current_posterior))*10,width=2)
+            pg.draw.circle(WIN,self.line_color_est,self.pos_est,np.sqrt(self.P_current_posterior[0,0])*2,width=2)
 
         
 
 #return submarine to center and reset acceleration and history        
     def reset(self):
-        self.pos_real = (WIDTH/2, HEIGHT/2)
-        self.pos_real_history =[]
-        self.velocity_real = (0,0)
+        # self.pos_real = (WIDTH/2, HEIGHT/2)
+        # self.pos_real_history =[]
+        # self.velocity_real = (0,0)
+        self.__init__(self.width,self.length,self.fill_color,self.line_color)
 
     def update(self, acceleration, submerged):
     #update history         
         if len(self.pos_real_history) > FPS*10:
             self.pos_real_history.pop(0)
+        if len(self.pos_est_history) > FPS*10:
+            self.pos_est_history.pop(0)
         
     #gps measurement
         # multiply sigma_r by infinity if sumberged
@@ -120,15 +128,18 @@ class Submarine:
 
     #update position
         # simulate natural state evolution with sampled noise
-        self.x_real = np.matmul(self.A, self.x_real) + self.B * acceleration * SUB_ACCELERATION + self.B * np.random.multivariate_normal([0,0],self.Q)
+        self.x_real = np.matmul(self.A, self.x_real) + np.matmul(self.B,  np.diag(acceleration * SUB_ACCELERATION))  \
+            + np.matmul(self.B , np.diag(np.random.multivariate_normal([0,0],self.Q)))
 
         # Kalman filter 
+
         ### prediction stage
-        self.x_current_prior = np.matmul(self.A, self.x_previous_posterior) + self.B * acceleration * SUB_ACCELERATION
+        self.x_current_prior = np.matmul(self.A, self.x_previous_posterior) + np.matmul(self.B , np.diag(acceleration * SUB_ACCELERATION))
         self.P_current_prior = np.matmul(self.A, np.matmul(self.P_previous_posterior,self.A.transpose())) + self.Q
         ### correction stage
-        self.K = np.matmul(self.P_current_prior, np.matmul(self.H.transpose(), np.linalg.inv(self.P_current_prior + self.R*r_factor))) # calculat Kalman gain
-        self.z = np.array([self.measurements[-1],[0,0]],dtype = np.float32) # get latest measurement
+        self.K = np.matmul(self.P_current_prior, np.matmul(self.H.transpose(), np.linalg.inv(self.P_current_prior + self.R*r_factor))) # calculate Kalman gain
+        if submerged and Submarine.force_K_zero : self.K = np.array([[0,0],[0,0]],dtype = np.float32)
+        self.z = np.array([np.mean(self.measurements[-1:],axis=0),[0,0]],dtype = np.float32) # get latest measurement
         self.x_current_posterior = self.x_current_prior + np.matmul(self.K, (self.z - np.matmul(self.H, self.x_current_prior))) # update state estimate with measurement
         self.P_current_posterior = np.matmul((np.eye(2, dtype = np.float32) - np.matmul(self.K, self.H)), self.P_current_prior)
         ### increment state
@@ -167,5 +178,6 @@ class Submarine:
 
         self.corners += self.pos_real
         self.pos_real_history.append(self.pos_real)
+        self.pos_est_history.append(self.pos_est)
 
 

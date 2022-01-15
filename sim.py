@@ -1,10 +1,10 @@
 #external libraries
 import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide" # hide pygame startup message
 
 import pygame as pg
 import numpy as np
-from numpy.random import default_rng
+
 
 #own imports
 from constants import *
@@ -31,16 +31,16 @@ def draw_window(submerged = False, draw_estimated = False,draw_real = True, gps_
         vector_field.UpdateLayer()
         grid.GridInView((1000,0),vector_field)
 
-    #draw GUI
-    GUI.draw(WIN,(10,10))
-    
     #draw submarines
     if draw_real:
         real_sub.draw()
     if draw_estimated:
-        estimated_sub.draw()
+        pass
     if gps_on:
         real_sub.gps_draw_measure()
+
+    #draw GUI
+    GUI.draw(WIN,(10,10))
 
     #refresh screen
     pg.display.update()    
@@ -58,16 +58,13 @@ def main():
     # user-controlled variabes #
     ############################
 
-    arrows = []  #direction of submarine, set with the arrow keys    
-
-    imu_drift = 0.5 # ussually submarine IMUs are pretty accurate but for the sake of the experiment
-                  # the accracy of the IMUs can be varied. Higher value means more drift in sensor
+    arrows = [[0,0]]  #direction of submarine, set with the arrow keys    
 
     submerged = False # wether the submarine is submerged. while submerged the submarine doesn't recieve gps corrections
 
     gps_on = True # wether gps measurements get drawn
 
-    draw_estimated = False # wether to draw estimated (by GPS and/or IMU) position of submarine
+    draw_estimated = False # wether to draw estimated position history of submarine
 
     draw_real = True # wether to draw real position of submarine
 
@@ -75,31 +72,24 @@ def main():
 
     draw_menu = True # wether to draw GUI menu
 
-
     run = True 
+    
+    acceleration = np.zeros((2,2),dtype=np.float32) # placeholder acceleration, controlled with arrow keys
+
+    force_K_zero = True # If True Kalman gain is set to 0 when submerged
 
     #############
     # MAIN LOOP #
     #############
-    # hello hello v2
     while run:
         clock.tick(FPS)
         ticks += 1
-
-#GPS measurement every couple of frames
-        # if ticks % 1 == 0:
-        #     # real_sub.gps_measure()
-        #     if submerged == False:
-        #         correction_vector = estimated_sub.pos_real - np.mean(real_sub.measurements, axis = 0)
-        #         estimated_sub.pos_real = estimated_sub.pos_real - correction_vector
-        #         estimated_sub.velocity_real -= correction_vector*0.01 
-#
         for event in pg.event.get():
             
             if event.type == pg.QUIT:
                 run = False
-
-# Key down
+# Arrow Keys
+    # Key down
             if event.type == pg.KEYDOWN:
                 #check whether its an arrow key
                 try:
@@ -123,14 +113,15 @@ def main():
                     run = False           
                 if event.key == 120 and (event.mod == 4097 or event.mod == 1): # check if user presses 'Shift+x' and reset simulation
                     real_sub.reset()
-                    estimated_sub.reset()
                 if event.key == 27: # check if user presses 'ESC and toggle menu
                     draw_menu = not draw_menu
+                if event.key == 107: # check if user presses 'K' and toggle force_K_zero
+                    Submarine.force_K_zero = not Submarine.force_K_zero                
                 
 
-                #print(event.key) # --> use this to find out keyboard key IDs
+                # print(event.key) # --> use this in debug to find out keyboard key IDs
 
-# Key up
+    # Key up
             #remove the released component from the list with acceleration vectors
             if event.type == pg.KEYUP:
                 try:
@@ -139,65 +130,58 @@ def main():
                         arrows.remove(arrow[1])
                 except KeyError:
                     pass # pass if another (non-arrow) key is released
+            
         
-        try:
-            acceleration = np.sum(arrows,axis =0)
-
-            real_sub.update(acceleration, submerged)
-
-            #calculate drift
-            if draw_ff:
-                drift = np.array(vector_field.Sample(estimated_sub.pos_real))*0.3 # vector_field drift from flow field and scale it
-            else:
-                rng = default_rng()
-                drift = rng.normal(0,1,size =2)*imu_drift # vector_field drift from random normal distribution
-
-            estimated_sub.update(acceleration + drift, submerged) # add drift to acceleration vector
-             
+# Update submarine position
+        acceleration = np.sum(arrows,axis =0)
+        real_sub.update(acceleration, submerged)
+           
                 
-        except:
-            pass
-        try:
-            if draw_menu: #adds a simple GUI list to display values on the screen
-                GUI.add_text_object('CONTROLS :', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('____________________________________', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('  ', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [ARROWS KEYS] to move submarine', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [S] to submerge submarine', ' ',color = LINE_COLOR_WHITE)
-                # GUI.add_text_object('press [E] to show measured submarine position', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [R] to show real submarine position', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [G] to show GPS readings', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [F] to toggle flow field', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [SHIFT+X] to reset simulaiton', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [X] quit', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('press [ESC] to toggle this menu', ' ',color = LINE_COLOR_WHITE)
-                            
-                GUI.add_text_object('____________________________________ ', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object(' ', ' ',color = LINE_COLOR_WHITE)
-                GUI.add_text_object('acceleration[x,y] = ', np.sum(arrows,axis = 0),color = LINE_COLOR_GREEN)
-                GUI.add_text_object('IMU drift coeficcient = ', imu_drift,color = LINE_COLOR_GREEN)
-                GUI.add_text_object('View GPS readings = ', gps_on, color = LINE_COLOR_GREEN)
-                GUI.add_text_object('Submerged = ', submerged, color = LINE_COLOR_GREEN)
-                GUI.add_text_object('Show estimated position= ', draw_estimated, color = LINE_COLOR_GREEN)
-                GUI.add_text_object('Show real position = ', draw_real, color = LINE_COLOR_GREEN)
-                GUI.add_text_object('Flow field active = ', draw_ff, color = LINE_COLOR_GREEN)
+# GUI
 
-                # GUI.add_text_object('____________________________________  ', ' ',color = LINE_COLOR_WHITE)
-                # GUI.add_text_object('   ', ' ',color = LINE_COLOR_WHITE)            
-                # GUI.add_text_object('Ground truth', ' ',color = LINE_COLOR_WHITE)
-                # GUI.add_text_object('Estimated position', ' ',color = LINE_COLOR_WHITE)       
-                # 
-                GUI.add_text_object('____________________________________   ', ' ',color = LINE_COLOR_WHITE)         
-                GUI.add_text_object('Estimate Covariance Matrix = ', np.around(real_sub.P_current_posterior, 2),color = LINE_COLOR_WHITE)
-                GUI.add_text_object('Kalman Gain = ', np.around(real_sub.K, 2),color = LINE_COLOR_WHITE)
+        if draw_menu: #adds a simple GUI list to display values on the screen
+            GUI.add_text_object('CONTROLS :', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('____________________________________', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('  ', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('press [ARROWS KEYS] to move submarine', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('press [S] to submerge submarine', ' ',color = LINE_COLOR_WHITE)
+            # GUI.add_text_object('press [E] to show measured submarine position', ' ',color = LINE_COLOR_WHITE)
+            # GUI.add_text_object('press [R] to show real submarine position', ' ',color = LINE_COLOR_WHITE)
+            # GUI.add_text_object('press [G] to show GPS readings', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('press [F] to toggle flow field', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('press [K] to force K=0', ' ',color = LINE_COLOR_WHITE)
+            # GUI.add_text_object('press [SHIFT+X] to reset simulaiton', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('press [X] quit', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('press [ESC] to toggle this menu', ' ',color = LINE_COLOR_WHITE)
+                        
+            GUI.add_text_object('____________________________________ ', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object(' ', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('acceleration[x,y] = ', np.sum(arrows,axis = 0),color = LINE_COLOR_GREEN)
+            # GUI.add_text_object('View GPS readings = ', gps_on, color = LINE_COLOR_GREEN if gps_on==True else LINE_COLOR_RED)
+            GUI.add_text_object('Submerged = ', submerged, color = LINE_COLOR_GREEN if submerged==True else LINE_COLOR_RED)
+            # GUI.add_text_object('Show estimated position= ', draw_estimated, color = LINE_COLOR_GREEN if draw_estimated==True else LINE_COLOR_RED)
+            # GUI.add_text_object('Show real position = ', draw_real, color = LINE_COLOR_GREEN if draw_real==True else LINE_COLOR_RED)
+            # GUI.add_text_object('Flow field active = ', draw_ff, color = LINE_COLOR_GREEN if draw_ff==True else LINE_COLOR_RED)
+            GUI.add_text_object('Force K=0:  ', Submarine.force_K_zero, color = LINE_COLOR_GREEN if Submarine.force_K_zero==True else LINE_COLOR_RED)
 
-        except:
-            pass
+            GUI.add_text_object('____________________________________  ', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('   ', ' ',color = LINE_COLOR_WHITE)            
+            GUI.add_text_object('Ground truth', ' ',color = LINE_COLOR_WHITE)
+            GUI.add_text_object('Estimated position', ' ',color = LINE_COLOR_WHITE)       
+            # 
+            GUI.add_text_object('____________________________________   ', ' ',color = LINE_COLOR_WHITE)         
+            GUI.add_text_object('Standard deviation Location estimate = ',np.sqrt(real_sub.P_current_posterior[0,0]),color = LINE_COLOR_WHITE)
+            GUI.add_text_object('Estimate error covariance matrix = ',real_sub.P_current_posterior,color = LINE_COLOR_WHITE)
+            GUI.add_text_object('Kalman Gain = ', real_sub.K,color = LINE_COLOR_WHITE)
+            
+
+
+
         
-
+# draw screen
         draw_window(submerged,draw_estimated, draw_real, gps_on,draw_ff) # call main draw function and pass relevant variables
 
-
+# quit
     pg.quit()
     
 
@@ -205,7 +189,7 @@ if __name__=='__main__':
 
     CurrentBackground.set(BG_COLOR) #initialize background color
     real_sub = Submarine(5,35) # create ground truth submarine
-    estimated_sub =Submarine(5,35,fill_color =[180,0,50],line_color=LINE_COLOR_RED) # create submarine for displaying calculated values
+    # estimated_sub =Submarine(5,35,fill_color =[180,0,50],line_color=LINE_COLOR_RED) # create submarine for displaying calculated values
     grid = vg.Grid(64,32) # initialize grid for vector field
     vector_field = vg.VectorGrid(4,0.3,0.25) # initialize vector field
     
