@@ -186,7 +186,7 @@ def main():
     
 
 if __name__=='__main__':
-
+    print('hi')
     CurrentBackground.set(BG_COLOR) #initialize background color
     real_sub = Submarine(5,35) # create ground truth submarine
     # estimated_sub =Submarine(5,35,fill_color =[180,0,50],line_color=LINE_COLOR_RED) # create submarine for displaying calculated values
