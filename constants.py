@@ -9,6 +9,7 @@ except:
 
 WIDTH, HEIGHT = 800, 800 # default resolution if not 'full screen' or 'custom'
 custom_resolution = False # can be overwritten with arguments from console
+# custom_resolution = True
 
 for opt,arg in opts:
     if opt == '-r' or '--resolution':
@@ -27,6 +28,7 @@ else:
     USING_SYSTEM_RESOLUTION = False
 
 #set window size to full screen (windows only)
+
 if USING_SYSTEM_RESOLUTION:
     WIDTH, HEIGHT = (GetSystemMetrics(0),(GetSystemMetrics(1)))
 
